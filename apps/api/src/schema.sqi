@@ -1,0 +1,39 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TABLE IF NOT EXISTS users(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ email TEXT UNIQUE NOT NULL,
+ password_hash TEXT NOT NULL,
+ username TEXT UNIQUE NOT NULL,
+ display_name TEXT NOT NULL,
+ bio TEXT DEFAULT '',
+ avatar_url TEXT DEFAULT '',
+ city TEXT DEFAULT '',
+ role TEXT NOT NULL DEFAULT 'user' CHECK(role IN('user','admin')),
+ email_verified BOOLEAN NOT NULL DEFAULT false,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS verification_codes(
+ id BIGSERIAL PRIMARY KEY, user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ code_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS verification_user_idx ON verification_codes(user_id,expires_at);
+CREATE TABLE IF NOT EXISTS sessions(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS posts(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ body TEXT NOT NULL DEFAULT '', media_url TEXT DEFAULT '', media_type TEXT DEFAULT '',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS posts_created_idx ON posts(created_at DESC);
+CREATE TABLE IF NOT EXISTS likes(user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(user_id,post_id));
+CREATE TABLE IF NOT EXISTS comments(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,body TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS follows(follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,following_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(follower_id,following_id),CHECK(follower_id<>following_id));
+CREATE TABLE IF NOT EXISTS communities(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),name TEXT UNIQUE NOT NULL,description TEXT DEFAULT '',city TEXT DEFAULT '',created_by UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS community_members(community_id UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(community_id,user_id));
+CREATE TABLE IF NOT EXISTS events(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),title TEXT NOT NULL,description TEXT DEFAULT '',city TEXT DEFAULT '',venue TEXT DEFAULT '',starts_at TIMESTAMPTZ NOT NULL,created_by UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS businesses(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),name TEXT NOT NULL,description TEXT DEFAULT '',city TEXT DEFAULT '',category TEXT DEFAULT '',address TEXT DEFAULT '',lat DOUBLE PRECISION,lng DOUBLE PRECISION,created_by UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS conversations(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS conversation_members(conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,PRIMARY KEY(conversation_id,user_id));
+CREATE TABLE IF NOT EXISTS messages(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,body TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),read_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS messages_conv_idx ON messages(conversation_id,created_at);
+CREATE TABLE IF NOT EXISTS notifications(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,type TEXT NOT NULL,payload JSONB NOT NULL DEFAULT '{}',created_at TIMESTAMPTZ NOT NULL DEFAULT now(),read_at TIMESTAMPTZ);
